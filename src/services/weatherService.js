@@ -245,39 +245,30 @@ class WeatherService {
   // Combined weather data
   async getWeatherData(lat, lon, location = null) {
     try {
-      // Fetch NASA current + NOAA (for hourly) concurrently
+      // Primary: WeatherAPI for real current temps and forecasts
+      if (this.isWeatherApiConfigured()) {
+        const wa = await this.getWeatherAPICombined(lat, lon);
+        return {
+          location: location || { lat, lon, name: `${lat.toFixed(2)}, ${lon.toFixed(2)}` },
+          current: wa.current,
+          forecast: wa.forecast,
+          hourly: wa.hourly,
+          alerts: []
+        };
+      }
+
+      // Fallback: NASA + NOAA if WeatherAPI key is not configured
       const [nasaCurrent, noaaData] = await Promise.all([
         this.getNASACurrentWeather(lat, lon),
         this.getNOAAWeather(lat, lon)
       ]);
-
       const nasaForecast = await this.getNASAForecast(lat, lon);
-
-      let current = nasaCurrent;
-      let forecast = nasaForecast;
-      let hourly = noaaData?.hourly || [];
-
-      // Validate NASA data; if invalid, fallback to WeatherAPI when available
-      if (!this.isValidCurrent(current) || !this.isValidForecast(forecast)) {
-        if (this.isWeatherApiConfigured()) {
-          try {
-            const wa = await this.getWeatherAPICombined(lat, lon);
-            if (!this.isValidCurrent(current)) current = wa.current;
-            if (!this.isValidForecast(forecast)) {
-              forecast = wa.forecast;
-              if (!hourly || hourly.length === 0) hourly = wa.hourly || [];
-            }
-          } catch (e) {
-            console.warn('WeatherAPI fallback failed:', e?.message || e);
-          }
-        }
-      }
 
       return {
         location: location || { lat, lon, name: `${lat.toFixed(2)}, ${lon.toFixed(2)}` },
-        current,
-        forecast,
-        hourly,
+        current: nasaCurrent,
+        forecast: nasaForecast,
+        hourly: noaaData?.hourly || [],
         alerts: []
       };
     } catch (error) {
